@@ -49,9 +49,13 @@ app.use((err, req, res, next) => {
     });
 });
 
-const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    const PORT = process.env.PORT || 5000;
+    const server = app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
+    
+    // Increase timeout for long-running synchronization (10 minutes)
+    server.timeout = 600000;
+    server.keepAliveTimeout = 600000;
+}
 
-// Increase timeout for long-running synchronization (10 minutes)
-server.timeout = 600000;
-server.keepAliveTimeout = 600000;
+module.exports = app;
