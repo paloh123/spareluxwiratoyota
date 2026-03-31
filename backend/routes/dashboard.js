@@ -8,13 +8,13 @@ const { verifyToken } = require('../middleware/auth');
 router.get('/summary', verifyToken, async (req, res) => {
     try {
         const [counts] = await db.query(`
-      SELECT 
-        COUNT(*) as total_order,
-        SUM(CASE WHEN status = 'On Order' THEN 1 ELSE 0 END) as on_order,
-        SUM(CASE WHEN status = 'On Delivery' THEN 1 ELSE 0 END) as on_delivery,
-        SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) as completed,
-        SUM(CASE WHEN status = 'Partial' THEN 1 ELSE 0 END) as partial,
-        SUM(CASE WHEN status = 'Overdue' THEN 1 ELSE 0 END) as overdue
+        SELECT 
+        COUNT(DISTINCT no_order) as total_order,
+        SUM(CASE WHEN status_order = 'On Order' THEN 1 ELSE 0 END) as on_order,
+        SUM(CASE WHEN status_order = 'On Delivery' THEN 1 ELSE 0 END) as on_delivery,
+        SUM(CASE WHEN status_order = 'Completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN status_order = 'Partial' THEN 1 ELSE 0 END) as partial,
+        SUM(CASE WHEN status_order = 'Overdue' THEN 1 ELSE 0 END) as overdue
       FROM orders
     `);
 
@@ -30,9 +30,9 @@ router.get('/summary', verifyToken, async (req, res) => {
 router.get('/charts', verifyToken, async (req, res) => {
     try {
         const [pieData] = await db.query(`
-      SELECT status as name, COUNT(*) as value
+      SELECT status_order as name, COUNT(*) as value
       FROM orders
-      GROUP BY status
+      GROUP BY status_order
     `);
 
         // Line Chart: Orders per month for the current year

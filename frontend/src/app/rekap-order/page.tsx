@@ -331,8 +331,8 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
                 
-                // Convert to JSON
-                const jsonData = xlsx.utils.sheet_to_json(worksheet, { raw: false, dateNF: 'yyyy-mm-dd' }) as any[];
+                // Convert to JSON with column letter keys (A, B, C...) to avoid index shifting when A/B are empty
+                const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: "A", raw: true, defval: "" }) as any[];
                 
                 if (jsonData.length === 0) {
                     setErrorMsg("File kosong atau format tidak sesuai");
@@ -340,30 +340,56 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
                     return;
                 }
 
-                // Map data based on expected columns
-                const mappedData = jsonData.map(row => {
-                    // Normalize keys to lowercase and remove spaces/underscores for flexible matching
-                    const normalizedRow: Record<string, any> = {};
-                    Object.keys(row).forEach(k => {
-                        const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
-                        normalizedRow[cleanKey] = row[k];
-                    });
+                // Map data based on expected columns symbols (C, D, E... AF)
+                const mappedData = jsonData.map((row, idx) => {
+                    // Skip the very first row if it looks exactly like headers (this happens sometimes)
+                    if (row.C && String(row.C).toLowerCase().trim() === "no order") return null;
+                    if (!row.C || String(row.C).trim() === "") return null; // Minimal C (no_order) harus ada
 
-                    const getCol = (possibleNames: string[]) => {
-                        const matched = possibleNames.find(pn => normalizedRow[pn.toLowerCase().replace(/[^a-z0-9]/g, '')] !== undefined);
-                        return matched ? normalizedRow[matched.toLowerCase().replace(/[^a-z0-9]/g, '')] : "";
+                    // Safe string parsing
+                    const safeStr = (val: any) => val ? String(val).trim() : "";
+                    const safeNum = (val: any) => {
+                        if (!val) return 0;
+                        const num = Number(val);
+                        return isNaN(num) ? 0 : num;
                     };
 
                     return {
-                        no_order: getCol(['No Order', 'NoOrder', 'Order No', 'NoOrderPart']),
-                        tanggal: getCol(['Tanggal', 'Date', 'Tgl Order', 'Tanggal Order', 'Tgl']),
-                        nama_pelanggan: getCol(['Nama Pelanggan', 'Customer', 'Nama', 'Pelanggan', 'NamaPelanggan']),
-                        no_polisi: getCol(['No Polisi', 'Nopol', 'Plat', 'Polisi', 'NoPol', 'NoPolisi']),
-                        status: getCol(['Status', 'StatusOrder']),
-                        total_part: getCol(['Total Part', 'Qty', 'Part', 'TotalPart']),
-                        umur_order: getCol(['Umur Order', 'Umur', 'Hari', 'UmurOrder'])
+                        no_order: safeStr(row.C),            
+                        tgl_order: safeStr(row.D),           
+                        jenis_order: safeStr(row.E),         
+                        no_part: safeStr(row.F),             
+                        nama_part: safeStr(row.G),           
+                        qty: safeNum(row.H),                 
+                        tipe: safeStr(row.I),                
+                        keterangan: safeStr(row.J),          
+                        no_rangka: safeStr(row.K),          
+                        model: safeStr(row.L),              
+                        tipe_mobil: safeStr(row.M),         
+                        hp_contact: safeStr(row.N),         
+                        contact: safeStr(row.O),            // Customer Name
+                        etd: safeStr(row.R),                
+                        eta: safeStr(row.S),                
+                        status_order: safeStr(row.T) || 'On Order', 
+                        sisa: safeNum(row.U),               
+                        delivery: safeStr(row.V),           
+                        suplai: safeNum(row.W),             
+                        kedatangan_1: safeStr(row.X),       
+                        kedatangan_2: safeStr(row.Y),       
+                        kedatangan_3: safeStr(row.Z),       
+                        kedatangan_4: safeStr(row.AA),       
+                        kedatangan_5: safeStr(row.AB),       
+                        last_ata: safeStr(row.AC),           
+                        lead_time_order: safeNum(row.AD),    
+                        lead_time_delivery: safeNum(row.AE), 
+                        umur_order: safeNum(row.AF),         
+                        // Mappings for UI:
+                        nama_pelanggan: safeStr(row.O) || safeStr(row.N) || "-", 
+                        no_polisi: "-", // Default dash since P/Q are unused
+                        status: safeStr(row.T) || 'On Order',
+                        tanggal: safeStr(row.D)
                     };
-                }).filter(r => r.no_order && r.nama_pelanggan); // Filter baris yg ada no_order dan nama_pelanggan minimum
+                }).filter(r => r !== null);
 
                 console.log("Mapped Data:", mappedData);
 

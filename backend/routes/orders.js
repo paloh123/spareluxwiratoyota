@@ -40,9 +40,12 @@ router.get('/', verifyToken, async (req, res) => {
         const { search, status, sort, order = 'DESC', page = 1, limit = 10 } = req.query;
 
         let query = `
-      SELECT o.*, u.name as created_by_name,
-        (SELECT COUNT(*) FROM order_parts op WHERE op.order_id = o.id) as total_part,
-        DATEDIFF(CURRENT_DATE(), o.tgl_order) as umur_order
+      SELECT MAX(o.id) as id, o.no_order, MAX(o.tgl_order) as tgl_order, 
+        MAX(o.nama_pelanggan) as nama_pelanggan, MAX(o.no_polisi) as no_polisi, 
+        MAX(o.status_order) as status, 
+        COUNT(*) as total_part,
+        MAX(DATEDIFF(CURRENT_DATE(), o.tgl_order)) as umur_order,
+        MAX(u.name) as created_by_name
       FROM orders o
       LEFT JOIN users u ON o.created_by = u.id
       WHERE 1=1
@@ -56,13 +59,24 @@ router.get('/', verifyToken, async (req, res) => {
         }
 
         if (status && status !== 'All') {
-            query += ` AND o.status = ?`;
+            query += ` AND o.status_order = ?`;
             queryParams.push(status);
         }
 
+        query += ` GROUP BY o.no_order`;
+
         // Sorting
         const allowedSortColumns = ['no_order', 'tgl_order', 'nama_pelanggan', 'no_polisi', 'status', 'total_part', 'umur_order'];
-        const sortCol = allowedSortColumns.includes(sort) ? sort : 'o.tgl_order';
+        let sortCol = allowedSortColumns.includes(sort) ? sort : 'tgl_order';
+        
+        // Alias mapping for sorting in GROUP BY
+        if (sortCol === 'status') sortCol = 'MAX(o.status_order)';
+        if (sortCol === 'tgl_order') sortCol = 'MAX(o.tgl_order)';
+        if (sortCol === 'nama_pelanggan') sortCol = 'MAX(o.nama_pelanggan)';
+        if (sortCol === 'no_polisi') sortCol = 'MAX(o.no_polisi)';
+        if (sortCol === 'total_part') sortCol = 'COUNT(*)';
+        if (sortCol === 'umur_order') sortCol = 'MAX(DATEDIFF(CURRENT_DATE(), o.tgl_order))';
+
         const sortDir = order.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
         query += ` ORDER BY ${sortCol} ${sortDir}`;
 
@@ -73,8 +87,8 @@ router.get('/', verifyToken, async (req, res) => {
 
         const [rows] = await db.query(query, queryParams);
 
-        // Get total count for pagination
-        let countQuery = `SELECT COUNT(*) as total FROM orders o WHERE 1=1`;
+        // Get total count for pagination (count of groups)
+        let countQuery = `SELECT COUNT(DISTINCT no_order) as total FROM orders o WHERE 1=1`;
         const countParams = [];
         if (search) {
             countQuery += ` AND (o.no_order LIKE ? OR o.no_polisi LIKE ? OR o.no_rangka LIKE ? OR o.nama_pelanggan LIKE ?)`;
@@ -82,7 +96,7 @@ router.get('/', verifyToken, async (req, res) => {
             countParams.push(searchTerm, searchTerm, searchTerm, searchTerm);
         }
         if (status && status !== 'All') {
-            countQuery += ` AND o.status = ?`;
+            countQuery += ` AND o.status_order = ?`;
             countParams.push(status);
         }
         const [[{ total }]] = await db.query(countQuery, countParams);
@@ -106,19 +120,29 @@ router.get('/', verifyToken, async (req, res) => {
 // GET /api/orders/:id
 router.get('/:id', verifyToken, async (req, res) => {
     try {
-        const [orders] = await db.query(`
+        const [initialRow] = await db.query(`
+      SELECT o.no_order
+      FROM orders o
+      WHERE o.id = ?
+    `, [req.params.id]);
+
+        if (initialRow.length === 0) return res.status(404).json({ message: 'Order not found' });
+
+        const noOrder = initialRow[0].no_order;
+
+        const [allParts] = await db.query(`
       SELECT o.*, u.name as created_by_name,
       DATEDIFF(CURRENT_DATE(), o.tgl_order) as umur_order
       FROM orders o
       LEFT JOIN users u ON o.created_by = u.id
-      WHERE o.id = ?
-    `, [req.params.id]);
+      WHERE o.no_order = ?
+    `, [noOrder]);
 
-        if (orders.length === 0) return res.status(404).json({ message: 'Order not found' });
+        // Map status_order to status for frontend
+        const parts = allParts.map(p => ({ ...p, status: p.status_order }));
+        const mainOrder = { ...parts[0], parts };
 
-        const [parts] = await db.query('SELECT * FROM order_parts WHERE order_id = ?', [req.params.id]);
-
-        res.json({ ...orders[0], parts });
+        res.json(mainOrder);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server Error' });
@@ -138,27 +162,27 @@ router.post('/', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req, r
         } = req.body;
 
         // Default status is 'On Order'
-        const status = 'On Order';
-
-        const [orderResult] = await connection.query(`
-      INSERT INTO orders 
-      (no_order, tgl_order, no_rangka, model, no_polisi, nama_pelanggan, status, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `, [no_order, tgl_order || new Date(), no_rangka, model, no_polisi, nama_pelanggan, status, req.user.id]);
-
-        const orderId = orderResult.insertId;
+        const status_order = req.body.status_order || req.body.status || 'On Order';
 
         if (parts && parts.length > 0) {
             const partValues = parts.map(p => [
-                orderId, p.no_part, p.nama_part, p.qty, p.etd, p.eta,
-                p.ata || null, p.status_part || 'On Order', p.qty, 0 // sisa = qty, suplai = 0 initially
+                no_order, tgl_order || new Date(), p.no_part, p.nama_part, p.qty, p.etd, p.eta,
+                status_order, p.sisa !== undefined ? p.sisa : p.qty, p.suplai || 0,
+                no_rangka, model, no_polisi, nama_pelanggan, req.user.id
             ]);
 
             await connection.query(`
-        INSERT INTO order_parts 
-        (order_id, no_part, nama_part, qty, etd, eta, ata, status_part, sisa, suplai)
+        INSERT INTO orders 
+        (no_order, tgl_order, no_part, nama_part, qty, etd, eta, status_order, sisa, suplai, no_rangka, model, no_polisi, nama_pelanggan, created_by)
         VALUES ?
       `, [partValues]);
+        } else {
+            // Insert single row if no parts (unlikely but safe)
+            await connection.query(`
+        INSERT INTO orders 
+        (no_order, tgl_order, no_rangka, model, no_polisi, nama_pelanggan, status_order, created_by, no_part, nama_part)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [no_order, tgl_order || new Date(), no_rangka, model, no_polisi, nama_pelanggan, status_order, req.user.id, '-', '-']);
         }
 
         await connection.commit();
@@ -182,19 +206,16 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
     try {
         await connection.beginTransaction();
 
-        const orderId = req.params.id;
-        console.log(`PUT /api/orders/${orderId} - Basic data update`);
+        const pkgId = req.params.id;
         const {
             no_order, tgl_order, no_rangka, model, no_polisi, nama_pelanggan, status,
-            parts // Array of part objects (with optional id for existing parts)
+            parts // Array of part objects
         } = req.body;
 
-        // Check order exists
-        const [existing] = await connection.query('SELECT id FROM orders WHERE id = ?', [orderId]);
-        if (existing.length === 0) {
-            console.log('Order not found:', orderId);
-            return res.status(404).json({ message: 'Order not found' });
-        }
+        // Find current no_order for this record
+        const [existing] = await connection.query('SELECT no_order FROM orders WHERE id = ?', [pkgId]);
+        if (existing.length === 0) return res.status(404).json({ message: 'Order not found' });
+        const oldNoOrder = existing[0].no_order;
 
         const safeFormatDate = (d) => {
             if (!d) return null;
@@ -206,75 +227,23 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
         };
 
         const formattedDate = safeFormatDate(tgl_order);
+        const finalStatus = status || 'On Order';
 
-        console.log('Update orders table...');
-        await connection.query(`
-            UPDATE orders SET no_order=?, tgl_order=?, no_rangka=?, model=?, no_polisi=?, nama_pelanggan=?, status=?
-            WHERE id = ?
-        `, [no_order, formattedDate, no_rangka, model, no_polisi, nama_pelanggan, status || 'On Order', orderId]);
+        // Delete all old rows for this order and re-insert (Cleanest for denormalized)
+        await connection.query('DELETE FROM orders WHERE no_order = ?', [oldNoOrder]);
 
-        if (parts && Array.isArray(parts)) {
-            console.log(`Processing ${parts.length} parts...`);
-            // Delete all existing parts then re-insert (simpler approach)
-            await connection.query('DELETE FROM order_parts WHERE order_id = ?', [orderId]);
+        if (parts && Array.isArray(parts) && parts.length > 0) {
+            const partValues = parts.map(p => [
+                no_order, formattedDate, p.no_part, p.nama_part, parseInt(p.qty) || 0,
+                safeFormatDate(p.etd), safeFormatDate(p.eta), p.status_part || p.status_order || finalStatus,
+                parseInt(p.sisa) || 0, parseInt(p.suplai) || 0,
+                no_rangka, model, no_polisi, nama_pelanggan, req.user.id
+            ]);
 
-            if (parts.length > 0) {
-                const partValues = parts.map(p => {
-                    const qty = parseInt(p.qty) || 0;
-                    const suplai = parseInt(p.suplai) || 0;
-                    const sisa = (p.sisa !== undefined && !isNaN(parseInt(p.sisa))) ? parseInt(p.sisa) : qty;
-
-                    return [
-                        orderId, p.no_part, p.nama_part,
-                        qty,
-                        safeFormatDate(p.etd), safeFormatDate(p.eta), safeFormatDate(p.ata),
-                        p.status_part || 'On Order',
-                        sisa,
-                        suplai
-                    ];
-                });
-
-                await connection.query(`
-                    INSERT INTO order_parts (order_id, no_part, nama_part, qty, etd, eta, ata, status_part, sisa, suplai)
-                    VALUES ?
-                `, [partValues]);
-            }
-
-            // --- AUTO RECALCULATE ORDER STATUS BASED ON PARTS ---
-            // Fetch the newly inserted/updated parts
-            const [allParts] = await connection.query('SELECT status_part FROM order_parts WHERE order_id = ?', [orderId]);
-
-            let allReceived = true;
-            let anyReceivedOrPartial = false;
-            let anyOnDelivery = false;
-
-            if (allParts.length === 0) {
-                allReceived = false;
-            } else {
-                for (const p of allParts) {
-                    if (p.status_part === 'Received') {
-                        anyReceivedOrPartial = true;
-                    } else if (p.status_part === 'Partial') {
-                        anyReceivedOrPartial = true;
-                        allReceived = false;
-                    } else {
-                        allReceived = false;
-                        if (p.status_part === 'On Delivery') anyOnDelivery = true;
-                    }
-                }
-            }
-
-            let newOrderStatus = 'On Order';
-            if (allReceived && allParts.length > 0) {
-                newOrderStatus = 'Completed';
-            } else if (anyReceivedOrPartial) {
-                newOrderStatus = 'Partial';
-            } else if (anyOnDelivery) {
-                newOrderStatus = 'On Delivery';
-            }
-
-            // Update the order with calculated status (overriding whatever was in the body if parts exist)
-            await connection.query('UPDATE orders SET status = ? WHERE id = ?', [newOrderStatus, orderId]);
+            await connection.query(`
+                INSERT INTO orders (no_order, tgl_order, no_part, nama_part, qty, etd, eta, status_order, sisa, suplai, no_rangka, model, no_polisi, nama_pelanggan, created_by)
+                VALUES ?
+            `, [partValues]);
         }
 
         await connection.commit();
@@ -299,11 +268,11 @@ router.delete('/:id', verifyToken, authorizeRoles('Admin'), async (req, res) => 
         await connection.beginTransaction();
 
         const orderId = req.params.id;
-        const [existing] = await connection.query('SELECT id FROM orders WHERE id = ?', [orderId]);
+        const [existing] = await connection.query('SELECT no_order FROM orders WHERE id = ?', [orderId]);
         if (existing.length === 0) return res.status(404).json({ message: 'Order not found' });
 
-        await connection.query('DELETE FROM order_parts WHERE order_id = ?', [orderId]);
-        await connection.query('DELETE FROM orders WHERE id = ?', [orderId]);
+        const noOrder = existing[0].no_order;
+        await connection.query('DELETE FROM orders WHERE no_order = ?', [noOrder]);
 
         await connection.commit();
         res.json({ message: 'Order deleted successfully' });
@@ -320,7 +289,6 @@ router.delete('/:id', verifyToken, authorizeRoles('Admin'), async (req, res) => 
 // Import orders from Excel/CSV. Admin & Partsman only
 router.post('/import', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req, res) => {
     console.log("=== Import API Hit ===");
-    console.log("Body length:", req.body ? req.body.length : 'undefined');
     
     const connection = await db.getConnection();
     try {
@@ -328,66 +296,113 @@ router.post('/import', verifyToken, authorizeRoles('Admin', 'Partsman'), async (
         const orders = req.body;
 
         if (!Array.isArray(orders) || orders.length === 0) {
-            console.log("Validation failed: Not an array or empty", typeof orders);
             return res.status(400).json({ message: 'Data tidak valid atau kosong' });
         }
 
-        let importedCount = 0;
+        const safeFormatDate = (d) => {
+            if (!d) return null;
+            try {
+                let dateObj;
+                if (!isNaN(d)) {
+                    // Excel serial date 
+                    dateObj = new Date((d - (25567 + 1)) * 86400 * 1000); 
+                } else {
+                    dateObj = new Date(d);
+                }
+                if (!isNaN(dateObj.getTime())) {
+                    return dateObj.toISOString().split('T')[0];
+                }
+            } catch (e) {}
+            return null;
+        };
 
-        for (const order of orders) {
-            // Field mapping: No Order -> no_order, Tanggal -> tanggal, Nama Pelanggan -> nama_pelanggan, No Polisi -> no_polisi, Status -> status
-            const { no_order, tanggal, nama_pelanggan, no_polisi, status } = order;
+        const insertValues = [];
+        const userId = req.user ? req.user.id : null;
 
-            if (!no_order || !nama_pelanggan) continue; // Skip invalid rows
+        for (const row of orders) {
+            if (!row.no_order) continue; // Skip invalid rows
 
-            // Safe date formatting
-            let formattedDate = null;
-            if (tanggal) {
-                try {
-                    // Try to parse excel date if it's a number, or string date
-                    let dateObj;
-                    if (!isNaN(tanggal)) {
-                        // Excel serial date (days since 1899-12-30)
-                        dateObj = new Date((tanggal - (25567 + 1)) * 86400 * 1000); // adjust for JS timezone offset later if needed, but standard new Date handles it roughly. If it's string, standard Parse.
-                    } else {
-                        dateObj = new Date(tanggal);
-                    }
-                    
-                    if (!isNaN(dateObj.getTime())) {
-                        formattedDate = dateObj.toISOString().split('T')[0];
-                    }
-                } catch (e) {}
-            }
-            if (!formattedDate) formattedDate = new Date().toISOString().split('T')[0];
+            const val = [
+                row.no_order, 
+                safeFormatDate(row.tgl_order) || new Date().toISOString().split('T')[0], 
+                row.jenis_order || '', 
+                row.no_part || '-', 
+                row.nama_part || '', 
+                row.qty || 0, 
+                row.tipe || '', 
+                row.keterangan || '', 
+                row.no_rangka || '', 
+                row.model || '', 
+                row.tipe_mobil || '', 
+                row.hp_contact || '', 
+                safeFormatDate(row.etd), 
+                safeFormatDate(row.eta), 
+                row.status_order || 'On Order', 
+                row.sisa || 0, 
+                row.delivery || '', 
+                row.suplai || 0, 
+                safeFormatDate(row.kedatangan_1), 
+                safeFormatDate(row.kedatangan_2), 
+                safeFormatDate(row.kedatangan_3), 
+                safeFormatDate(row.kedatangan_4), 
+                safeFormatDate(row.kedatangan_5), 
+                safeFormatDate(row.last_ata), 
+                row.lead_time_order || 0, 
+                row.lead_time_delivery || 0, 
+                row.umur_order || 0,
+                row.nama_pelanggan || '-', 
+                row.no_polisi || '-', 
+                userId
+            ];
+            insertValues.push(val);
+        }
 
-            let finalStatus = status || 'On Order';
-
-            // Check if order exists
-            const [existing] = await connection.query('SELECT id FROM orders WHERE no_order = ?', [no_order]);
-            
-            if (existing.length > 0) {
-                // Update existing order
-                await connection.query(`
-                    UPDATE orders SET tgl_order=?, nama_pelanggan=?, no_polisi=?, status=?
-                    WHERE no_order = ?
-                `, [formattedDate, nama_pelanggan, no_polisi || '', finalStatus, no_order]);
-            } else {
-                // Insert new order
-                const userId = req.user ? req.user.id : null;
-                await connection.query(`
-                    INSERT INTO orders (no_order, tgl_order, no_rangka, model, no_polisi, nama_pelanggan, status, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                `, [no_order, formattedDate, '', '', no_polisi || '', nama_pelanggan, finalStatus, userId]);
-            }
-            importedCount++;
+        if (insertValues.length > 0) {
+            await connection.query(`
+                INSERT INTO orders (
+                    no_order, tgl_order, jenis_order, no_part, nama_part, qty, tipe, keterangan, 
+                    no_rangka, model, tipe_mobil, hp_contact, etd, eta, status_order, sisa, 
+                    delivery, suplai, kedatangan_1, kedatangan_2, kedatangan_3, kedatangan_4, 
+                    kedatangan_5, last_ata, lead_time_order, lead_time_delivery, umur_order,
+                    nama_pelanggan, no_polisi, created_by
+                ) VALUES ?
+                ON DUPLICATE KEY UPDATE 
+                    tgl_order=VALUES(tgl_order), 
+                    jenis_order=COALESCE(NULLIF(VALUES(jenis_order), ''), jenis_order), 
+                    nama_part=COALESCE(NULLIF(VALUES(nama_part), ''), nama_part), 
+                    qty=VALUES(qty), 
+                    tipe=COALESCE(NULLIF(VALUES(tipe), ''), tipe), 
+                    keterangan=COALESCE(NULLIF(VALUES(keterangan), ''), keterangan), 
+                    no_rangka=COALESCE(NULLIF(VALUES(no_rangka), ''), no_rangka), 
+                    model=COALESCE(NULLIF(VALUES(model), ''), model), 
+                    tipe_mobil=COALESCE(NULLIF(VALUES(tipe_mobil), ''), tipe_mobil), 
+                    hp_contact=COALESCE(NULLIF(VALUES(hp_contact), ''), hp_contact), 
+                    etd=COALESCE(VALUES(etd), etd), 
+                    eta=COALESCE(VALUES(eta), eta), 
+                    status_order=VALUES(status_order), 
+                    sisa=VALUES(sisa), 
+                    delivery=COALESCE(NULLIF(VALUES(delivery), ''), delivery), 
+                    suplai=VALUES(suplai), 
+                    kedatangan_1=COALESCE(VALUES(kedatangan_1), kedatangan_1), 
+                    kedatangan_2=COALESCE(VALUES(kedatangan_2), kedatangan_2), 
+                    kedatangan_3=COALESCE(VALUES(kedatangan_3), kedatangan_3), 
+                    kedatangan_4=COALESCE(VALUES(kedatangan_4), kedatangan_4), 
+                    kedatangan_5=COALESCE(VALUES(kedatangan_5), kedatangan_5), 
+                    last_ata=COALESCE(VALUES(last_ata), last_ata), 
+                    lead_time_order=VALUES(lead_time_order), 
+                    lead_time_delivery=VALUES(lead_time_delivery), 
+                    umur_order=VALUES(umur_order), 
+                    nama_pelanggan=COALESCE(NULLIF(VALUES(nama_pelanggan), '-'), nama_pelanggan), 
+                    no_polisi=COALESCE(NULLIF(VALUES(no_polisi), '-'), no_polisi)
+            `, [insertValues]);
         }
 
         await connection.commit();
-        res.json({ message: `Import berhasil. ${importedCount} data diproses.` });
+        res.json({ message: `Import berhasil. ${insertValues.length} baris data diproses secara UPSERT.` });
     } catch (error) {
         await connection.rollback();
         console.error('POST /import Error:', error);
-        res.status(500).json({ message: 'Terjadi kesalahan saat import data', error: error.message });
+        res.status(500).json({ message: `Kesalahan SQL: ${error.message}`, error: error.message });
     } finally {
         connection.release();
     }
