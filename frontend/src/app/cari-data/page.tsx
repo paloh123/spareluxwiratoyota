@@ -327,43 +327,43 @@ export default function CariData() {
                             <p className="text-sm text-gray-500">Kami menemukan {orderList.length} pesanan yang relevan. Silakan pilih pesanan (No Order) di bawah ini untuk melihat rincian parts-nya.</p>
                         </div>
                     </div>
-                    
-                    <div className="grid md:grid-cols-2 gap-4">
-                        {orderList.map((order: any) => (
-                            <div 
-                                key={order.id} 
+
+                    <div className="bg-white dark:bg-[#111] rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden shadow-soft">
+                        {orderList.map((order: any, idx: number) => (
+                            <div
+                                key={order.id}
                                 onClick={() => handleSelectOrder(order.id)}
-                                className="group cursor-pointer bg-white dark:bg-[#111] border-2 border-transparent hover:border-brand-primary/30 p-5 rounded-2xl shadow-soft hover:shadow-xl transition-all relative overflow-hidden flex flex-col justify-between h-full"
+                                className={`group cursor-pointer p-4 hover:bg-gray-50 dark:hover:bg-white/5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${idx !== orderList.length - 1 ? 'border-b border-gray-100 dark:border-gray-800' : ''}`}
                             >
-                                {/* Subtle Hover Gradient */}
-                                <div className="absolute inset-0 bg-gradient-to-br from-brand-primary/0 to-brand-primary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                
-                                <div className="relative z-10">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div>
-                                            <p className="text-xs font-bold text-gray-400 mb-1 uppercase tracking-widest">No Order</p>
-                                            <p className="text-xl font-black text-brand-primary group-hover:scale-105 transition-transform origin-left">{order.no_order}</p>
-                                        </div>
-                                        <div className={`px-3 py-1 rounded-full text-xs font-bold ${order.status === 'Completed' || order.status === 'Received' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                            {order.status}
-                                        </div>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary group-hover:bg-brand-primary group-hover:text-white transition-colors shrink-0">
+                                        <FileText className="w-5 h-5" />
                                     </div>
-                                    
-                                    <div className="space-y-2 mb-4">
-                                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                            <Calendar className="w-4 h-4" /> {formatDate(order.tgl_order)}
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <span className="text-base font-bold text-gray-900 dark:text-white group-hover:text-brand-primary transition-colors">{order.no_order}</span>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${order.status === 'Completed' || order.status === 'Received' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                {order.status}
+                                            </span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                            <CarFront className="w-4 h-4" /> {order.nama_pelanggan} <span className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded ml-1 font-mono">{order.no_polisi}</span>
-                                        </div>
-                                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
-                                            <Box className="w-4 h-4" /> {order.total_part} Parts dipesan
+                                        <div className="flex items-center gap-3 text-xs text-gray-500">
+                                            <span className="flex items-center gap-1"><CarFront className="w-3 h-3" /> {order.nama_pelanggan}</span>
+                                            <span className="w-1 h-1 rounded-full bg-gray-300"></span>
+                                            <span className="font-mono">{order.no_polisi}</span>
                                         </div>
                                     </div>
                                 </div>
-                                
-                                <div className="relative z-10 mt-2 flex justify-end text-brand-primary text-sm font-bold opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all items-center gap-1">
-                                    Lihat Detail Part <ChevronRight className="w-4 h-4" />
+
+                                <div className="flex items-center justify-between sm:justify-end gap-6">
+                                    <div className="text-right hidden md:block">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Tanggal Order</p>
+                                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">{formatDate(order.tgl_order)}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Total Part</p>
+                                        <p className="text-xs font-bold text-brand-primary">{order.total_part} Items</p>
+                                    </div>
+                                    <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-brand-primary group-hover:translate-x-1 transition-all" />
                                 </div>
                             </div>
                         ))}
@@ -373,10 +373,10 @@ export default function CariData() {
 
             {orderData && (
                 <div className="max-w-5xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-500">
-                    
+
                     {/* Kembali Button if coming from history list */}
                     {orderList.length > 0 && (
-                        <button 
+                        <button
                             onClick={() => setOrderData(null)}
                             className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-brand-primary transition-colors mb-4"
                         >

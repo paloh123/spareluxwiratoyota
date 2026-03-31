@@ -68,7 +68,7 @@ router.get('/', verifyToken, async (req, res) => {
         // Sorting
         const allowedSortColumns = ['no_order', 'tgl_order', 'nama_pelanggan', 'no_polisi', 'status', 'total_part', 'umur_order'];
         let sortCol = allowedSortColumns.includes(sort) ? sort : 'tgl_order';
-        
+
         // Alias mapping for sorting in GROUP BY
         if (sortCol === 'status') sortCol = 'MAX(o.status_order)';
         if (sortCol === 'tgl_order') sortCol = 'MAX(o.tgl_order)';
@@ -139,8 +139,8 @@ router.get('/:id', verifyToken, async (req, res) => {
     `, [noOrder]);
 
         // Map status_order to status for frontend
-        const parts = allParts.map(p => ({ 
-            ...p, 
+        const parts = allParts.map(p => ({
+            ...p,
             status: p.status_order,
             status_part: p.status_order,
             ata: p.last_ata
@@ -301,7 +301,7 @@ router.delete('/:id', verifyToken, authorizeRoles('Admin'), async (req, res) => 
 // Import orders from Excel/CSV. Admin & Partsman only
 router.post('/import', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req, res) => {
     console.log("=== Import API Hit ===");
-    
+
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -317,14 +317,14 @@ router.post('/import', verifyToken, authorizeRoles('Admin', 'Partsman'), async (
                 let dateObj;
                 if (!isNaN(d)) {
                     // Excel serial date 
-                    dateObj = new Date((d - (25567 + 1)) * 86400 * 1000); 
+                    dateObj = new Date((d - (25567 + 1)) * 86400 * 1000);
                 } else {
                     dateObj = new Date(d);
                 }
                 if (!isNaN(dateObj.getTime())) {
                     return dateObj.toISOString().split('T')[0];
                 }
-            } catch (e) {}
+            } catch (e) { }
             return null;
         };
 
@@ -335,35 +335,35 @@ router.post('/import', verifyToken, authorizeRoles('Admin', 'Partsman'), async (
             if (!row.no_order) continue; // Skip invalid rows
 
             const val = [
-                row.no_order, 
-                safeFormatDate(row.tgl_order) || new Date().toISOString().split('T')[0], 
-                row.jenis_order || '', 
-                row.no_part || '-', 
-                row.nama_part || '', 
-                row.qty || 0, 
-                row.tipe || '', 
-                row.keterangan || '', 
-                row.no_rangka || '', 
-                row.model || '', 
-                row.tipe_mobil || '', 
-                row.hp_contact || '', 
-                safeFormatDate(row.etd), 
-                safeFormatDate(row.eta), 
-                row.status_order || 'On Order', 
-                row.sisa || 0, 
-                row.delivery || '', 
-                row.suplai || 0, 
-                safeFormatDate(row.kedatangan_1), 
-                safeFormatDate(row.kedatangan_2), 
-                safeFormatDate(row.kedatangan_3), 
-                safeFormatDate(row.kedatangan_4), 
-                safeFormatDate(row.kedatangan_5), 
-                safeFormatDate(row.last_ata), 
-                row.lead_time_order || 0, 
-                row.lead_time_delivery || 0, 
+                row.no_order,
+                safeFormatDate(row.tgl_order) || new Date().toISOString().split('T')[0],
+                row.jenis_order || '',
+                row.no_part || '-',
+                row.nama_part || '',
+                row.qty || 0,
+                row.tipe || '',
+                row.keterangan || '',
+                row.no_rangka || '',
+                row.model || '',
+                row.tipe_mobil || '',
+                row.hp_contact || '',
+                safeFormatDate(row.etd),
+                safeFormatDate(row.eta),
+                row.status_order || 'On Order',
+                row.sisa || 0,
+                row.delivery || '',
+                row.suplai || 0,
+                safeFormatDate(row.kedatangan_1),
+                safeFormatDate(row.kedatangan_2),
+                safeFormatDate(row.kedatangan_3),
+                safeFormatDate(row.kedatangan_4),
+                safeFormatDate(row.kedatangan_5),
+                safeFormatDate(row.last_ata),
+                row.lead_time_order || 0,
+                row.lead_time_delivery || 0,
                 row.umur_order || 0,
-                row.nama_pelanggan || '-', 
-                row.no_polisi || '-', 
+                row.nama_pelanggan || '-',
+                row.no_polisi || '-',
                 userId
             ];
             insertValues.push(val);
