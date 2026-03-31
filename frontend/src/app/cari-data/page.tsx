@@ -9,13 +9,13 @@ import { toast } from "react-toastify";
 import Cookies from "js-cookie";
 
 const STATUS_PART_COLORS: Record<string, string> = {
-    'Received': 'bg-green-100 text-green-700',
-    'Partial': 'bg-purple-100 text-purple-700',
+    'Completed': 'bg-green-100 text-green-700',
+    'On Delivery': 'bg-blue-100 text-blue-700',
     'On Order': 'bg-orange-100 text-orange-700',
 };
 
 const ALL_STATUSES = ['On Order', 'On Delivery', 'Partial', 'Completed', 'Overdue'];
-const PART_STATUSES = ['On Order', 'Partial', 'Received'];
+const PART_STATUSES = ['On Order', 'Completed', 'On Delivery'];
 
 function toDateInput(val: any) {
     if (!val) return "";
@@ -48,6 +48,24 @@ function EditOrderModal({ order, onClose, onSaved }: { order: any; onClose: () =
         const newParts = [...parts];
         newParts[index] = { ...newParts[index], [e.target.name]: e.target.value };
         setParts(newParts);
+
+        // Auto calculate status if part status changed
+        if (e.target.name === "status_part") {
+            const statuses = newParts.map(p => p.status_part || "On Order");
+            const allCompleted = statuses.every(s => s === "Completed");
+            const anyCompleted = statuses.some(s => s === "Completed");
+            const anyOnDelivery = statuses.some(s => s === "On Delivery");
+
+            let nextStatus = form.status;
+            if (allCompleted) nextStatus = "Completed";
+            else if (anyCompleted) nextStatus = "Partial";
+            else if (anyOnDelivery) nextStatus = "On Delivery";
+            else if (statuses.every(s => s === "On Order")) nextStatus = "On Order";
+
+            if (nextStatus !== form.status) {
+                setForm(prev => ({ ...prev, status: nextStatus }));
+            }
+        }
     };
     const addPart = () => setParts([...parts, { no_part: "", nama_part: "", qty: 1, etd: "", eta: "", ata: "", status_part: "On Order", sisa: 1, suplai: 0 }]);
     const removePart = (index: number) => {
@@ -134,10 +152,12 @@ function EditOrderModal({ order, onClose, onSaved }: { order: any; onClose: () =
                                 {parts.map((p, i) => (
                                     <div key={i} className="bg-gray-50 dark:bg-[#111] rounded-xl border border-gray-200 dark:border-gray-800 p-3 relative group">
                                         <div className="absolute -left-2 -top-2 bg-brand-primary text-white w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shadow">{i + 1}</div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-2">
                                             {[
                                                 { label: "No Part", name: "no_part", type: "text", mono: true },
                                                 { label: "Nama Part", name: "nama_part", type: "text" },
+                                                { label: "No Polisi", name: "no_polisi", type: "text", mono: true },
+                                                { label: "Pelanggan", name: "nama_pelanggan", type: "text" },
                                                 { label: "Qty", name: "qty", type: "number" },
                                                 { label: "Suplai", name: "suplai", type: "number" },
                                                 { label: "ETA", name: "eta", type: "date" },
@@ -358,11 +378,15 @@ export default function CariData() {
                                 </div>
 
                                 <div className="flex items-center justify-between sm:justify-end gap-6">
-                                    <div className="text-right hidden md:block">
+                                    <div className="text-right hidden sm:block">
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Umur</p>
+                                        <p className="text-xs font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-md leading-none">{order.umur_order} Hari</p>
+                                    </div>
+                                    <div className="text-right hidden md:block border-l border-gray-100 dark:border-gray-800 pl-6">
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Tanggal Order</p>
                                         <p className="text-xs font-medium text-gray-600 dark:text-gray-400">{formatDate(order.tgl_order)}</p>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-right border-l border-gray-100 dark:border-gray-800 pl-6">
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Total Part</p>
                                         <p className="text-xs font-bold text-brand-primary">{order.total_part} Items</p>
                                     </div>

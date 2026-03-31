@@ -63,7 +63,7 @@ router.get('/', verifyToken, async (req, res) => {
             queryParams.push(status);
         }
 
-        query += ` GROUP BY o.no_order`;
+        query += ` GROUP BY o.no_order, o.no_polisi`;
 
         // Sorting
         const allowedSortColumns = ['no_order', 'tgl_order', 'nama_pelanggan', 'no_polisi', 'status', 'total_part', 'umur_order'];
@@ -88,7 +88,7 @@ router.get('/', verifyToken, async (req, res) => {
         const [rows] = await db.query(query, queryParams);
 
         // Get total count for pagination (count of groups)
-        let countQuery = `SELECT COUNT(DISTINCT no_order) as total FROM orders o WHERE 1=1`;
+        let countQuery = `SELECT COUNT(*) as total FROM (SELECT 1 FROM orders o WHERE 1=1`;
         const countParams = [];
         if (search) {
             countQuery += ` AND (o.no_order LIKE ? OR o.no_polisi LIKE ? OR o.no_rangka LIKE ? OR o.nama_pelanggan LIKE ?)`;
@@ -99,6 +99,7 @@ router.get('/', verifyToken, async (req, res) => {
             countQuery += ` AND o.status_order = ?`;
             countParams.push(status);
         }
+        countQuery += ` GROUP BY o.no_order, o.no_polisi) as grouped`;
         const [[{ total }]] = await db.query(countQuery, countParams);
 
         res.json({
@@ -232,7 +233,18 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
         };
 
         const formattedDate = safeFormatDate(tgl_order);
-        const finalStatus = status || 'On Order';
+        const statuses = (parts || []).map(p => p.status_part || 'On Order');
+        const allComp = statuses.length > 0 && statuses.every(s => s === 'Completed');
+        const anyComp = statuses.some(s => s === 'Completed');
+        const anyDeliv = statuses.some(s => s === 'On Delivery');
+
+        let nextStatus = status || 'On Order';
+        if (allComp) nextStatus = 'Completed';
+        else if (anyComp) nextStatus = 'Partial';
+        else if (anyDeliv) nextStatus = 'On Delivery';
+        else if (statuses.every(s => s === 'On Order')) nextStatus = 'On Order';
+
+        const finalStatus = nextStatus;
 
         // Delete all old rows for this order and re-insert (Cleanest for denormalized)
         await connection.query('DELETE FROM orders WHERE no_order = ?', [oldNoOrder]);
@@ -242,7 +254,7 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
                 no_order, formattedDate, p.no_part, p.nama_part, parseInt(p.qty) || 0,
                 safeFormatDate(p.etd), safeFormatDate(p.eta), p.status_part || p.status_order || finalStatus,
                 parseInt(p.sisa) || 0, parseInt(p.suplai) || 0,
-                no_rangka, model, no_polisi, nama_pelanggan, req.user.id,
+                p.no_rangka || no_rangka, p.model || model, p.no_polisi || no_polisi, p.nama_pelanggan || nama_pelanggan, req.user.id,
                 safeFormatDate(p.ata || p.last_ata),
                 safeFormatDate(p.kedatangan_1), safeFormatDate(p.kedatangan_2),
                 safeFormatDate(p.kedatangan_3), safeFormatDate(p.kedatangan_4),
@@ -407,6 +419,27 @@ router.post('/import', verifyToken, authorizeRoles('Admin', 'Partsman'), async (
                     nama_pelanggan=COALESCE(NULLIF(VALUES(nama_pelanggan), '-'), nama_pelanggan), 
                     no_polisi=COALESCE(NULLIF(VALUES(no_polisi), '-'), no_polisi)
             `, [insertValues]);
+
+            // Auto-sync status_order based on parts status after import
+            const importedNoOrders = [...new Set(insertValues.map(v => v[0]))];
+            if (importedNoOrders.length > 0) {
+                await connection.query(`
+                    UPDATE orders o
+                    JOIN (
+                        SELECT no_order, no_polisi,
+                            CASE 
+                                WHEN COUNT(*) = SUM(CASE WHEN status_order = 'Completed' THEN 1 ELSE 0 END) THEN 'Completed'
+                                WHEN SUM(CASE WHEN status_order = 'Completed' THEN 1 ELSE 0 END) > 0 THEN 'Partial'
+                                WHEN SUM(CASE WHEN status_order = 'On Delivery' THEN 1 ELSE 0 END) > 0 THEN 'On Delivery'
+                                ELSE 'On Order'
+                            END as calculated_status
+                        FROM orders
+                        WHERE no_order IN (?)
+                        GROUP BY no_order, no_polisi
+                    ) as sub ON o.no_order = sub.no_order AND o.no_polisi = sub.no_polisi
+                    SET o.status_order = sub.calculated_status
+                `, [importedNoOrders]);
+            }
         }
 
         await connection.commit();
