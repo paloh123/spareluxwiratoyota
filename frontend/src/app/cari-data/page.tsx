@@ -229,6 +229,7 @@ export default function CariData() {
     const [orderList, setOrderList] = useState<any[]>([]); // To hold multiple matched orders
     const [orderData, setOrderData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [activeNoPolisi, setActiveNoPolisi] = useState<string | null>(null);
     const [editTarget, setEditTarget] = useState<any>(null);
     const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
@@ -243,6 +244,7 @@ export default function CariData() {
         setIsLoading(true);
         setOrderData(null);
         setOrderList([]);
+        setActiveNoPolisi(null);
 
         try {
             const res = await api.fetch(`/orders?search=${searchQuery}&limit=20`);
@@ -258,8 +260,9 @@ export default function CariData() {
         }
     };
 
-    const handleSelectOrder = async (orderId: number) => {
+    const handleSelectOrder = async (orderId: number, polisiContext?: string) => {
         setIsLoading(true);
+        setActiveNoPolisi(polisiContext || null);
         try {
             const detailRes = await api.fetch(`/orders/${orderId}`);
             setOrderData(detailRes);
@@ -332,7 +335,7 @@ export default function CariData() {
                         {orderList.map((order: any, idx: number) => (
                             <div
                                 key={order.id}
-                                onClick={() => handleSelectOrder(order.id)}
+                                onClick={() => handleSelectOrder(order.id, order.no_polisi)}
                                 className={`group cursor-pointer p-4 hover:bg-gray-50 dark:hover:bg-white/5 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${idx !== orderList.length - 1 ? 'border-b border-gray-100 dark:border-gray-800' : ''}`}
                             >
                                 <div className="flex items-center gap-4">
@@ -457,8 +460,21 @@ export default function CariData() {
                     </div>
 
                     <div className="card overflow-hidden">
-                        <div className="p-4 border-b border-gray-100 dark:border-gray-800 font-bold flex items-center gap-2">
-                            <Box className="w-5 h-5 text-brand-primary" /> Detail Parts ({orderData.parts.length})
+                        <div className="p-4 border-b border-gray-100 dark:border-gray-800 font-bold flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <Box className="w-5 h-5 text-brand-primary" /> Detail Parts ({orderData.parts.filter((p: any) => !activeNoPolisi || p.no_polisi === activeNoPolisi).length})
+                            </div>
+                            {activeNoPolisi && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[10px] bg-brand-primary/10 text-brand-primary px-2 py-1 rounded-lg">Filter: {activeNoPolisi}</span>
+                                    <button 
+                                        onClick={() => setActiveNoPolisi(null)}
+                                        className="text-[10px] text-gray-400 hover:text-red-500 underline transition-colors"
+                                    >
+                                        Lihat Semua
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         <div className="overflow-x-auto">
@@ -475,7 +491,9 @@ export default function CariData() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {orderData.parts.map((p: any) => (
+                                    {orderData.parts
+                                        .filter((p: any) => !activeNoPolisi || p.no_polisi === activeNoPolisi)
+                                        .map((p: any) => (
                                         <tr key={p.id} className="border-b last:border-0 border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-[#111] transition-colors">
                                             <td className="px-6 py-4 font-mono font-medium">{p.no_part}</td>
                                             <td className="px-6 py-4 max-w-xs truncate">{p.nama_part}</td>
