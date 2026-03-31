@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/MainLayout";
 import { api } from "@/lib/api";
-import { Search, CarFront, FileText, Calendar, Box, Package, Pencil, Trash2, X, PlusCircle, Save } from "lucide-react";
+import { Search, CarFront, FileText, Calendar, Box, Package, Pencil, Trash2, X, PlusCircle, Save, History, ChevronRight, ArrowLeft } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { toast } from "react-toastify";
 import Cookies from "js-cookie";
@@ -226,6 +226,7 @@ function DeleteConfirmModal({ order, onClose, onDeleted }: { order: any; onClose
 // ===================== MAIN PAGE =====================
 export default function CariData() {
     const [searchQuery, setSearchQuery] = useState("");
+    const [orderList, setOrderList] = useState<any[]>([]); // To hold multiple matched orders
     const [orderData, setOrderData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [editTarget, setEditTarget] = useState<any>(null);
@@ -241,17 +242,29 @@ export default function CariData() {
 
         setIsLoading(true);
         setOrderData(null);
+        setOrderList([]);
+
         try {
-            const res = await api.fetch(`/orders?search=${searchQuery}&limit=1`);
+            const res = await api.fetch(`/orders?search=${searchQuery}&limit=20`);
             if (res.data.length === 0) {
                 toast.info("Data order tidak ditemukan (No Order/Polisi/Rangka)");
                 return;
             }
-            const orderId = res.data[0].id;
+            setOrderList(res.data);
+        } catch (error) {
+            toast.error("Gagal mencari data");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleSelectOrder = async (orderId: number) => {
+        setIsLoading(true);
+        try {
             const detailRes = await api.fetch(`/orders/${orderId}`);
             setOrderData(detailRes);
         } catch (error) {
-            toast.error("Gagal mencari data");
+            toast.error("Gagal memuat detail pesanan");
         } finally {
             setIsLoading(false);
         }
@@ -304,8 +317,72 @@ export default function CariData() {
                 </form>
             </div>
 
+            {/* Jika ada data pesanan (History Pelanggan), tapi belum ada yg di-klik */}
+            {orderList.length > 0 && !orderData && (
+                <div className="max-w-5xl mx-auto space-y-4 animate-in slide-in-from-bottom-4 fade-in duration-500">
+                    <div className="flex items-center gap-3 bg-brand-primary/10 border border-brand-primary/20 p-4 rounded-2xl mb-6">
+                        <div className="bg-brand-primary p-2 rounded-xl"><History className="w-5 h-5 text-white" /></div>
+                        <div>
+                            <h2 className="font-bold text-gray-800 dark:text-gray-200">History Pesanan Ditemukan!</h2>
+                            <p className="text-sm text-gray-500">Kami menemukan {orderList.length} pesanan yang relevan. Silakan pilih pesanan (No Order) di bawah ini untuk melihat rincian parts-nya.</p>
+                        </div>
+                    </div>
+                    
+                    <div className="grid md:grid-cols-2 gap-4">
+                        {orderList.map((order: any) => (
+                            <div 
+                                key={order.id} 
+                                onClick={() => handleSelectOrder(order.id)}
+                                className="group cursor-pointer bg-white dark:bg-[#111] border-2 border-transparent hover:border-brand-primary/30 p-5 rounded-2xl shadow-soft hover:shadow-xl transition-all relative overflow-hidden flex flex-col justify-between h-full"
+                            >
+                                {/* Subtle Hover Gradient */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-brand-primary/0 to-brand-primary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                
+                                <div className="relative z-10">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div>
+                                            <p className="text-xs font-bold text-gray-400 mb-1 uppercase tracking-widest">No Order</p>
+                                            <p className="text-xl font-black text-brand-primary group-hover:scale-105 transition-transform origin-left">{order.no_order}</p>
+                                        </div>
+                                        <div className={`px-3 py-1 rounded-full text-xs font-bold ${order.status === 'Completed' || order.status === 'Received' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                            {order.status}
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="space-y-2 mb-4">
+                                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <Calendar className="w-4 h-4" /> {formatDate(order.tgl_order)}
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <CarFront className="w-4 h-4" /> {order.nama_pelanggan} <span className="text-xs bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded ml-1 font-mono">{order.no_polisi}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <Box className="w-4 h-4" /> {order.total_part} Parts dipesan
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="relative z-10 mt-2 flex justify-end text-brand-primary text-sm font-bold opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all items-center gap-1">
+                                    Lihat Detail Part <ChevronRight className="w-4 h-4" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {orderData && (
                 <div className="max-w-5xl mx-auto space-y-6 animate-in slide-in-from-bottom-4 fade-in duration-500">
+                    
+                    {/* Kembali Button if coming from history list */}
+                    {orderList.length > 0 && (
+                        <button 
+                            onClick={() => setOrderData(null)}
+                            className="flex items-center gap-2 text-sm font-bold text-gray-500 hover:text-brand-primary transition-colors mb-4"
+                        >
+                            <ArrowLeft className="w-4 h-4" /> Kembali ke Daftar History Pencarian
+                        </button>
+                    )}
 
                     <div className="grid md:grid-cols-2 gap-6">
                         <div className="p-6 rounded-2xl bg-gradient-to-br from-brand-primary to-brand-primary text-white shadow-soft relative overflow-hidden transition-all hover:shadow-lg">

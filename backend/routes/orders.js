@@ -139,7 +139,12 @@ router.get('/:id', verifyToken, async (req, res) => {
     `, [noOrder]);
 
         // Map status_order to status for frontend
-        const parts = allParts.map(p => ({ ...p, status: p.status_order }));
+        const parts = allParts.map(p => ({ 
+            ...p, 
+            status: p.status_order,
+            status_part: p.status_order,
+            ata: p.last_ata
+        }));
         const mainOrder = { ...parts[0], parts };
 
         res.json(mainOrder);
@@ -237,12 +242,19 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
                 no_order, formattedDate, p.no_part, p.nama_part, parseInt(p.qty) || 0,
                 safeFormatDate(p.etd), safeFormatDate(p.eta), p.status_part || p.status_order || finalStatus,
                 parseInt(p.sisa) || 0, parseInt(p.suplai) || 0,
-                no_rangka, model, no_polisi, nama_pelanggan, req.user.id
+                no_rangka, model, no_polisi, nama_pelanggan, req.user.id,
+                safeFormatDate(p.ata || p.last_ata),
+                safeFormatDate(p.kedatangan_1), safeFormatDate(p.kedatangan_2),
+                safeFormatDate(p.kedatangan_3), safeFormatDate(p.kedatangan_4),
+                safeFormatDate(p.kedatangan_5)
             ]);
 
             await connection.query(`
-                INSERT INTO orders (no_order, tgl_order, no_part, nama_part, qty, etd, eta, status_order, sisa, suplai, no_rangka, model, no_polisi, nama_pelanggan, created_by)
-                VALUES ?
+                INSERT INTO orders (
+                    no_order, tgl_order, no_part, nama_part, qty, etd, eta, status_order, sisa, suplai, 
+                    no_rangka, model, no_polisi, nama_pelanggan, created_by, 
+                    last_ata, kedatangan_1, kedatangan_2, kedatangan_3, kedatangan_4, kedatangan_5
+                ) VALUES ?
             `, [partValues]);
         }
 

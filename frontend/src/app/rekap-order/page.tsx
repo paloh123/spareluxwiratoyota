@@ -385,7 +385,7 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
                         umur_order: safeNum(row.AF),         
                         // Mappings for UI:
                         nama_pelanggan: safeStr(row.O) || safeStr(row.N) || "-", 
-                        no_polisi: "-", // Default dash since P/Q are unused
+                        no_polisi: safeStr(row.J) || "-", // Diambil dari Kolom J (keterangan)
                         status: safeStr(row.T) || 'On Order',
                         tanggal: safeStr(row.D)
                     };
