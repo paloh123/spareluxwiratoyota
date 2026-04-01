@@ -239,6 +239,68 @@ function EditOrderModal({ order, onClose, onSaved }: { order: any; onClose: () =
     );
 }
 
+// ===================== DELETE ALL CONFIRM MODAL =====================
+function DeleteAllConfirmModal({ onClose, onDeleted }: { onClose: () => void; onDeleted: () => void }) {
+    const [deleting, setDeleting] = useState(false);
+    const [confirmText, setConfirmText] = useState("");
+
+    const handleDeleteAll = async () => {
+        if (confirmText !== "HAPUS SEMUA") return toast.error("Ketik 'HAPUS SEMUA' untuk konfirmasi");
+        setDeleting(true);
+        try {
+            await api.fetch(`/orders/all`, { method: "DELETE" });
+            toast.success("Semua data berhasil dihapus");
+            onDeleted();
+            onClose();
+        } catch (err: any) {
+            toast.error(err.message || "Gagal menghapus semua data");
+        } finally {
+            setDeleting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+            <div className="bg-white dark:bg-[#18181b] rounded-2xl shadow-2xl w-full max-w-md border border-red-500/30 animate-in zoom-in-95 duration-200 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0 border border-red-200">
+                        <Trash2 className="w-6 h-6 text-red-600" />
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-bold text-red-600 dark:text-red-500">HAPUS PERMANEN SEMUA DATA?</h2>
+                        <p className="text-sm text-gray-500">Tindakan ini <strong className="text-red-500">TIDAK BISA DIBATALKAN</strong></p>
+                    </div>
+                </div>
+                <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 mb-5 border border-red-100 dark:border-red-900/50">
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
+                        Tindakan ini akan mengosongkan seluruh tabel <strong>orders</strong>. Ketik <span className="font-mono font-bold text-red-600">HAPUS SEMUA</span> di bawah ini untuk melanjutkan penghapusan.
+                    </p>
+                    <input 
+                        type="text" 
+                        value={confirmText}
+                        onChange={(e) => setConfirmText(e.target.value)}
+                        placeholder="HAPUS SEMUA"
+                        className="w-full mt-3 px-3 py-2 text-sm font-mono border border-red-300 dark:border-red-700 rounded-lg focus:ring-2 focus:ring-red-500 outline-none uppercase"
+                    />
+                </div>
+                <div className="flex justify-end gap-3">
+                    <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium transition-colors">
+                        Batal
+                    </button>
+                    <button 
+                        onClick={handleDeleteAll} 
+                        disabled={deleting || confirmText !== "HAPUS SEMUA"} 
+                        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {deleting ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : <Trash2 className="w-4 h-4" />}
+                        {deleting ? "Menghapus..." : "EKSEKUSI HAPUS!"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ===================== DELETE CONFIRM MODAL =====================
 function DeleteConfirmModal({ order, onClose, onDeleted }: { order: any; onClose: () => void; onDeleted: () => void }) {
     const [deleting, setDeleting] = useState(false);
@@ -570,6 +632,7 @@ export default function RekapOrder() {
     const [editTarget, setEditTarget] = useState<any>(null);
     const [deleteTarget, setDeleteTarget] = useState<any>(null);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
 
     const fetchOrders = async () => {
         try {
@@ -625,6 +688,7 @@ export default function RekapOrder() {
             {editTarget && <EditOrderModal order={editTarget} onClose={() => setEditTarget(null)} onSaved={fetchOrders} />}
             {deleteTarget && <DeleteConfirmModal order={deleteTarget} onClose={() => setDeleteTarget(null)} onDeleted={fetchOrders} />}
             {showImportModal && <ImportExcelModal onClose={() => setShowImportModal(false)} onImported={fetchOrders} />}
+            {showDeleteAllModal && <DeleteAllConfirmModal onClose={() => setShowDeleteAllModal(false)} onDeleted={fetchOrders} />}
 
             <div className="flex justify-between items-center mb-6">
                 <div>
@@ -633,6 +697,14 @@ export default function RekapOrder() {
                 </div>
 
                 <div className="flex gap-2">
+                    {userRole === 'Admin' && (
+                        <button
+                            onClick={() => setShowDeleteAllModal(true)}
+                            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-colors shadow-lg shadow-red-600/20 mr-auto"
+                        >
+                            <Trash2 className="w-4 h-4" /> Hapus Semua
+                        </button>
+                    )}
                     {['Admin', 'Partsman'].includes(userRole) && (
                         <button
                             onClick={() => setShowImportModal(true)}

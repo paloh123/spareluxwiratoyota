@@ -42,7 +42,12 @@ router.get('/', verifyToken, async (req, res) => {
         let query = `
       SELECT MAX(o.id) as id, o.no_order, MAX(o.tgl_order) as tgl_order, 
         MAX(o.nama_pelanggan) as nama_pelanggan, MAX(o.no_polisi) as no_polisi, 
-        MAX(o.status_order) as status, 
+        CASE 
+          WHEN COUNT(*) = SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END) THEN 'Completed'
+          WHEN SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END) > 0 THEN 'Partial'
+          WHEN SUM(CASE WHEN status_order = 'On Delivery' THEN 1 ELSE 0 END) > 0 THEN 'On Delivery'
+          ELSE 'On Order'
+        END as status, 
         COUNT(*) as total_part,
         MAX(DATEDIFF(CURRENT_DATE(), o.tgl_order)) as umur_order,
         MAX(u.name) as created_by_name
@@ -70,7 +75,14 @@ router.get('/', verifyToken, async (req, res) => {
         let sortCol = allowedSortColumns.includes(sort) ? sort : 'tgl_order';
 
         // Alias mapping for sorting in GROUP BY
-        if (sortCol === 'status') sortCol = 'MAX(o.status_order)';
+        if (sortCol === 'status') sortCol = `
+          CASE 
+            WHEN COUNT(*) = SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END) THEN 'Completed'
+            WHEN SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END) > 0 THEN 'Partial'
+            WHEN SUM(CASE WHEN status_order = 'On Delivery' THEN 1 ELSE 0 END) > 0 THEN 'On Delivery'
+            ELSE 'On Order'
+          END
+        `;
         if (sortCol === 'tgl_order') sortCol = 'MAX(o.tgl_order)';
         if (sortCol === 'nama_pelanggan') sortCol = 'MAX(o.nama_pelanggan)';
         if (sortCol === 'no_polisi') sortCol = 'MAX(o.no_polisi)';
@@ -233,9 +245,9 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
         };
 
         const formattedDate = safeFormatDate(tgl_order);
-        const statuses = (parts || []).map(p => p.status_part || 'On Order');
-        const allComp = statuses.length > 0 && statuses.every(s => s === 'Completed');
-        const anyComp = statuses.some(s => s === 'Completed');
+        const statuses = (parts || []).map(p => p.status_part || p.status_order || 'On Order');
+        const allComp = statuses.length > 0 && statuses.every(s => s === 'Completed' || s === 'Received');
+        const anyComp = statuses.some(s => s === 'Completed' || s === 'Received');
         const anyDeliv = statuses.some(s => s === 'On Delivery');
 
         let nextStatus = status || 'On Order';
@@ -252,7 +264,7 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
         if (parts && Array.isArray(parts) && parts.length > 0) {
             const partValues = parts.map(p => [
                 no_order, formattedDate, p.no_part, p.nama_part, parseInt(p.qty) || 0,
-                safeFormatDate(p.etd), safeFormatDate(p.eta), p.status_part || p.status_order || finalStatus,
+                safeFormatDate(p.etd), safeFormatDate(p.eta), finalStatus,
                 parseInt(p.sisa) || 0, parseInt(p.suplai) || 0,
                 p.no_rangka || no_rangka, p.model || model, p.no_polisi || no_polisi, p.nama_pelanggan || nama_pelanggan, req.user.id,
                 safeFormatDate(p.ata || p.last_ata),
@@ -278,6 +290,24 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ message: 'Nomor Order sudah ada' });
         }
+        res.status(500).json({ message: 'Server Error', error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
+// DELETE /api/orders/all
+// Delete all orders. Admin only.
+router.delete('/all', verifyToken, authorizeRoles('Admin'), async (req, res) => {
+    const connection = await db.getConnection();
+    try {
+        await connection.beginTransaction();
+        await connection.query('TRUNCATE TABLE orders');
+        await connection.commit();
+        res.json({ message: 'Semua data order berhasil dihapus secara permanen.' });
+    } catch (error) {
+        await connection.rollback();
+        console.error('DELETE /api/orders/all Error:', error);
         res.status(500).json({ message: 'Server Error', error: error.message });
     } finally {
         connection.release();
@@ -328,13 +358,34 @@ router.post('/import', verifyToken, authorizeRoles('Admin', 'Partsman'), async (
             try {
                 let dateObj;
                 if (!isNaN(d)) {
-                    // Excel serial date 
-                    dateObj = new Date((d - (25567 + 1)) * 86400 * 1000);
+                    // Excel serial date (offset 25569 for 1 Jan 1970)
+                    dateObj = new Date((d - 25569) * 86400 * 1000);
+                    if (!isNaN(dateObj.getTime())) {
+                        const yyyy = dateObj.getUTCFullYear();
+                        const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+                        const dd = String(dateObj.getUTCDate()).padStart(2, '0');
+                        return `${yyyy}-${mm}-${dd}`;
+                    }
                 } else {
-                    dateObj = new Date(d);
-                }
-                if (!isNaN(dateObj.getTime())) {
-                    return dateObj.toISOString().split('T')[0];
+                    const strD = String(d).trim();
+                    // Try parsing DD/MM/YYYY or DD-MM-YYYY
+                    const parts = strD.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+                    if (parts) {
+                        let day = parseInt(parts[1], 10);
+                        let month = parseInt(parts[2], 10) - 1;
+                        let year = parseInt(parts[3], 10);
+                        if (year < 100) year += 2000;
+                        dateObj = new Date(year, month, day, 12, 0, 0); 
+                    } else {
+                        // Try fallback mapping (e.g. MM/DD/YYYY)
+                        dateObj = new Date(strD);
+                    }
+                    if (!isNaN(dateObj.getTime())) {
+                        const yyyy = dateObj.getFullYear();
+                        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+                        const dd = String(dateObj.getDate()).padStart(2, '0');
+                        return `${yyyy}-${mm}-${dd}`;
+                    }
                 }
             } catch (e) { }
             return null;

@@ -78,6 +78,27 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
             partId
         ]);
 
+        // SYNC STATUS ORDER FOR ALL PARTS IN THE SAME ORDER
+        const [allParts] = await connection.query(
+            'SELECT status_order FROM orders WHERE no_order = ? AND no_polisi = ?',
+            [part.no_order, part.no_polisi]
+        );
+
+        const statuses = allParts.map(p => p.status_order);
+        const allComp = statuses.every(s => s === 'Completed' || s === 'Received');
+        const anyComp = statuses.some(s => s === 'Completed' || s === 'Received');
+        const anyDeliv = statuses.some(s => s === 'On Delivery');
+
+        let finalStatus = 'On Order';
+        if (allComp) finalStatus = 'Completed';
+        else if (anyComp) finalStatus = 'Partial';
+        else if (anyDeliv) finalStatus = 'On Delivery';
+
+        await connection.query(
+            'UPDATE orders SET status_order = ? WHERE no_order = ? AND no_polisi = ?',
+            [finalStatus, part.no_order, part.no_polisi]
+        );
+
         await connection.commit();
         res.json({ message: 'Part updated successfully', status_part: newStatusPart });
     } catch (error) {
