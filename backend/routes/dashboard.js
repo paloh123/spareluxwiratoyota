@@ -16,7 +16,13 @@ router.get('/summary', verifyToken, async (req, res) => {
         SUM(CASE WHEN status_order = 'Partial' THEN 1 ELSE 0 END) as partial,
         SUM(CASE WHEN status_order = 'Overdue' THEN 1 ELSE 0 END) as overdue
       FROM (
-        SELECT no_order, no_polisi, MAX(status_order) as status_order
+        SELECT no_order, no_polisi, 
+          CASE 
+            WHEN COUNT(*) = SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END) THEN 'Completed'
+            WHEN SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END) > 0 THEN 'Partial'
+            WHEN SUM(CASE WHEN status_order = 'On Delivery' THEN 1 ELSE 0 END) > 0 THEN 'On Delivery'
+            ELSE 'On Order'
+          END as status_order
         FROM orders
         GROUP BY no_order, no_polisi
       ) as grouped_orders
@@ -36,7 +42,13 @@ router.get('/charts', verifyToken, async (req, res) => {
         const [pieData] = await db.query(`
       SELECT status_order as name, COUNT(*) as value
       FROM (
-        SELECT no_order, no_polisi, MAX(status_order) as status_order
+        SELECT no_order, no_polisi, 
+          CASE 
+            WHEN COUNT(*) = SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END) THEN 'Completed'
+            WHEN SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END) > 0 THEN 'Partial'
+            WHEN SUM(CASE WHEN status_order = 'On Delivery' THEN 1 ELSE 0 END) > 0 THEN 'On Delivery'
+            ELSE 'On Order'
+          END as status_order
         FROM orders
         GROUP BY no_order, no_polisi
       ) as grouped

@@ -158,7 +158,19 @@ router.get('/:id', verifyToken, async (req, res) => {
             status_part: p.status_order,
             ata: p.last_ata
         }));
-        const mainOrder = { ...parts[0], parts };
+
+        const statuses = parts.map(p => p.status_part);
+        const allComp = statuses.length > 0 && statuses.every(s => s === 'Completed' || s === 'Received');
+        const anyComp = statuses.some(s => s === 'Completed' || s === 'Received');
+        const anyDeliv = statuses.some(s => s === 'On Delivery');
+
+        let orderStatus = 'On Order';
+        if (allComp) orderStatus = 'Completed';
+        else if (anyComp) orderStatus = 'Partial';
+        else if (anyDeliv) orderStatus = 'On Delivery';
+        else if (statuses.every(s => s === 'On Order')) orderStatus = 'On Order';
+
+        const mainOrder = { ...parts[0], status: orderStatus, parts };
 
         res.json(mainOrder);
     } catch (error) {
@@ -264,7 +276,7 @@ router.put('/:id', verifyToken, authorizeRoles('Admin', 'Partsman'), async (req,
         if (parts && Array.isArray(parts) && parts.length > 0) {
             const partValues = parts.map(p => [
                 no_order, formattedDate, p.no_part, p.nama_part, parseInt(p.qty) || 0,
-                safeFormatDate(p.etd), safeFormatDate(p.eta), finalStatus,
+                safeFormatDate(p.etd), safeFormatDate(p.eta), p.status_part || p.status_order || 'On Order',
                 parseInt(p.sisa) || 0, parseInt(p.suplai) || 0,
                 p.no_rangka || no_rangka, p.model || model, p.no_polisi || no_polisi, p.nama_pelanggan || nama_pelanggan, req.user.id,
                 safeFormatDate(p.ata || p.last_ata),
@@ -471,26 +483,6 @@ router.post('/import', verifyToken, authorizeRoles('Admin', 'Partsman'), async (
                     no_polisi=COALESCE(NULLIF(VALUES(no_polisi), '-'), no_polisi)
             `, [insertValues]);
 
-            // Auto-sync status_order based on parts status after import
-            const importedNoOrders = [...new Set(insertValues.map(v => v[0]))];
-            if (importedNoOrders.length > 0) {
-                await connection.query(`
-                    UPDATE orders o
-                    JOIN (
-                        SELECT no_order, no_polisi,
-                            CASE 
-                                WHEN COUNT(*) = SUM(CASE WHEN status_order = 'Completed' THEN 1 ELSE 0 END) THEN 'Completed'
-                                WHEN SUM(CASE WHEN status_order = 'Completed' THEN 1 ELSE 0 END) > 0 THEN 'Partial'
-                                WHEN SUM(CASE WHEN status_order = 'On Delivery' THEN 1 ELSE 0 END) > 0 THEN 'On Delivery'
-                                ELSE 'On Order'
-                            END as calculated_status
-                        FROM orders
-                        WHERE no_order IN (?)
-                        GROUP BY no_order, no_polisi
-                    ) as sub ON o.no_order = sub.no_order AND o.no_polisi = sub.no_polisi
-                    SET o.status_order = sub.calculated_status
-                `, [importedNoOrders]);
-            }
         }
 
         await connection.commit();
