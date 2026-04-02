@@ -412,6 +412,16 @@ export default function CariData() {
                     )}
 
                     <div className="grid md:grid-cols-2 gap-6">
+                        {/* Ambil data kendaraan dari part yang cocok dengan no polisi yang dipilih */}
+                        {(() => {
+                            const vehiclePart = activeNoPolisi
+                                ? (orderData.parts || []).find((p: any) => p.no_polisi === activeNoPolisi)
+                                : null;
+                            const displayNoPolisi = vehiclePart?.no_polisi || orderData.no_polisi;
+                            const displayModel = vehiclePart?.model || orderData.model;
+                            const displayNoRangka = vehiclePart?.no_rangka || orderData.no_rangka;
+                            const displayNamaPelanggan = vehiclePart?.nama_pelanggan || orderData.nama_pelanggan;
+                            return (
                         <div className="p-6 rounded-2xl bg-gradient-to-br from-brand-primary to-brand-primary text-white shadow-soft relative overflow-hidden transition-all hover:shadow-lg">
                             {/* Glass overlay effect */}
                             <div className="absolute inset-0 bg-white/5 backdrop-blur-[2px]" />
@@ -423,25 +433,27 @@ export default function CariData() {
                                 <div className="space-y-4">
                                     <div>
                                         <p className="text-sm text-white/60">Nama Pelanggan / No Order</p>
-                                        <p className="font-bold text-xl">{orderData.nama_pelanggan} <span className="text-white/40 block text-sm">{orderData.no_order}</span></p>
+                                        <p className="font-bold text-xl">{displayNamaPelanggan} <span className="text-white/40 block text-sm">{orderData.no_order}</span></p>
                                     </div>
                                     <div className="flex justify-between border-t border-white/20 pt-4">
                                         <div>
                                             <p className="text-sm text-white/60">Model</p>
-                                            <p className="font-semibold">{orderData.model}</p>
+                                            <p className="font-semibold">{displayModel}</p>
                                         </div>
                                         <div>
                                             <p className="text-sm text-white/60">No Polisi</p>
-                                            <p className="font-mono bg-white/20 px-2 py-1 rounded">{orderData.no_polisi}</p>
+                                            <p className="font-mono bg-white/20 px-2 py-1 rounded">{displayNoPolisi}</p>
                                         </div>
                                     </div>
                                     <div>
                                         <p className="text-sm text-white/60">No Rangka</p>
-                                        <p className="font-mono text-sm">{orderData.no_rangka}</p>
+                                        <p className="font-mono text-sm">{displayNoRangka}</p>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                            );
+                        })()}
 
                         <div className="card p-6 flex flex-col justify-between">
                             <div className="flex items-center gap-3 mb-4 text-gray-500">
@@ -458,8 +470,14 @@ export default function CariData() {
                                     <span className="font-medium text-gray-900 dark:text-gray-100">{formatDate(orderData.tgl_order)}</span>
                                 </div>
                                 <div className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700">
-                                    <span className="text-gray-500 text-sm font-medium flex items-center gap-2"><Package className="w-4 h-4" /> Umur Order</span>
-                                    <span className="font-bold px-2 py-0.5 bg-red-100 text-red-600 rounded drop-shadow-sm">{orderData.umur_order} Hari</span>
+                                    <span className="text-gray-500 text-sm font-medium flex items-center gap-2">
+                                        <Package className="w-4 h-4" />
+                                        {orderData.status === 'Completed' ? 'Lead Time' : 'Umur Order'}
+                                    </span>
+                                    <span className={`font-bold px-2 py-0.5 rounded drop-shadow-sm ${orderData.status === 'Completed' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                                        {orderData.umur_order} Hari
+                                        {orderData.status === 'Completed' && <span className="ml-1 text-[10px] font-normal opacity-70">(selesai)</span>}
+                                    </span>
                                 </div>
                             </div>
 

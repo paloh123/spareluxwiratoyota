@@ -49,7 +49,11 @@ router.get('/', verifyToken, async (req, res) => {
           ELSE 'On Order'
         END as status, 
         COUNT(*) as total_part,
-        MAX(DATEDIFF(CURRENT_DATE(), o.tgl_order)) as umur_order,
+        CASE
+          WHEN COUNT(*) = SUM(CASE WHEN status_order IN ('Completed', 'Received') THEN 1 ELSE 0 END)
+          THEN DATEDIFF(MAX(o.last_ata), MAX(o.tgl_order))
+          ELSE MAX(DATEDIFF(CURRENT_DATE(), o.tgl_order))
+        END as umur_order,
         MAX(u.name) as created_by_name
       FROM orders o
       LEFT JOIN users u ON o.created_by = u.id
@@ -170,7 +174,23 @@ router.get('/:id', verifyToken, async (req, res) => {
         else if (anyDeliv) orderStatus = 'On Delivery';
         else if (statuses.every(s => s === 'On Order')) orderStatus = 'On Order';
 
-        const mainOrder = { ...parts[0], status: orderStatus, parts };
+        // Hitung umur order: jika Completed, gunakan last_ata terakhir (lead time aktual)
+        // Jika masih berjalan, hitung dari hari ini
+        let finalUmurOrder = parts[0].umur_order;
+        if (allComp) {
+            const ataValues = parts
+                .map(p => p.last_ata)
+                .filter(d => d)
+                .map(d => new Date(d).getTime())
+                .filter(t => !isNaN(t));
+            if (ataValues.length > 0) {
+                const maxAta = new Date(Math.max(...ataValues));
+                const tglOrder = new Date(parts[0].tgl_order);
+                finalUmurOrder = Math.floor((maxAta - tglOrder) / (1000 * 60 * 60 * 24));
+            }
+        }
+
+        const mainOrder = { ...parts[0], status: orderStatus, umur_order: finalUmurOrder, parts };
 
         res.json(mainOrder);
     } catch (error) {
