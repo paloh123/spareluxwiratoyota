@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, FileText, Search, Package,
-  PlusCircle, Users, ChevronRight
+  PlusCircle, Users, ChevronRight, Warehouse
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: "/rekap-order", label: "Rekap Order", icon: FileText, roles: ["Admin", "SA", "Partsman"], gradient: "from-blue-500 to-indigo-600" },
   { href: "/cari-data", label: "Cari Data", icon: Search, roles: ["Admin", "SA", "Partsman"], gradient: "from-violet-500 to-purple-600" },
   { href: "/mip", label: "MIP", icon: Package, roles: ["Admin", "SA", "Partsman"], gradient: "from-amber-500 to-orange-600" },
+  { href: "/ready-installation", label: "Ready Installation", icon: Warehouse, roles: ["Admin", "SA", "Partsman"], gradient: "from-cyan-500 to-teal-600" },
   { href: "/input-order", label: "Input Order", icon: PlusCircle, roles: ["Admin", "Partsman"], gradient: "from-emerald-500 to-teal-600" },
   { href: "/users", label: "User Management", icon: Users, roles: ["Admin"], gradient: "from-pink-500 to-fuchsia-600" },
 ];

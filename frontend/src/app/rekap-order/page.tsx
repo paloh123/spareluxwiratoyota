@@ -275,8 +275,8 @@ function DeleteAllConfirmModal({ onClose, onDeleted }: { onClose: () => void; on
                     <p className="text-sm text-gray-700 dark:text-gray-300">
                         Tindakan ini akan mengosongkan seluruh tabel <strong>orders</strong>. Ketik <span className="font-mono font-bold text-red-600">HAPUS SEMUA</span> di bawah ini untuk melanjutkan penghapusan.
                     </p>
-                    <input 
-                        type="text" 
+                    <input
+                        type="text"
                         value={confirmText}
                         onChange={(e) => setConfirmText(e.target.value)}
                         placeholder="HAPUS SEMUA"
@@ -287,9 +287,9 @@ function DeleteAllConfirmModal({ onClose, onDeleted }: { onClose: () => void; on
                     <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-sm font-medium transition-colors">
                         Batal
                     </button>
-                    <button 
-                        onClick={handleDeleteAll} 
-                        disabled={deleting || confirmText !== "HAPUS SEMUA"} 
+                    <button
+                        onClick={handleDeleteAll}
+                        disabled={deleting || confirmText !== "HAPUS SEMUA"}
                         className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {deleting ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : <Trash2 className="w-4 h-4" />}
@@ -365,7 +365,7 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
         // Validasi ekstensi
         const allowedExtensions = ['xlsx', 'xls', 'csv'];
         const extension = selectedFile.name.split('.').pop()?.toLowerCase() || '';
-        
+
         if (!allowedExtensions.includes(extension)) {
             toast.error("Format file tidak didukung. Gunakan .xlsx, .xls, atau .csv");
             return;
@@ -384,7 +384,7 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
     const parseFile = (file: File) => {
         setLoading(true);
         setErrorMsg("");
-        
+
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
@@ -392,10 +392,10 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
                 const workbook = xlsx.read(data, { type: 'binary' });
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
-                
+
                 // Convert to JSON with column letter keys (A, B, C...) to avoid index shifting when A/B are empty
                 const jsonData = xlsx.utils.sheet_to_json(worksheet, { header: "A", raw: true, defval: "" }) as any[];
-                
+
                 if (jsonData.length === 0) {
                     setErrorMsg("File kosong atau format tidak sesuai");
                     setLoading(false);
@@ -417,36 +417,36 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
                     };
 
                     return {
-                        no_order: safeStr(row.C),            
-                        tgl_order: safeStr(row.D),           
-                        jenis_order: safeStr(row.E),         
-                        no_part: safeStr(row.F),             
-                        nama_part: safeStr(row.G),           
-                        qty: safeNum(row.H),                 
-                        tipe: safeStr(row.I),                
-                        keterangan: safeStr(row.J),          
-                        no_rangka: safeStr(row.K),          
-                        model: safeStr(row.L),              
-                        tipe_mobil: safeStr(row.M),         
-                        hp_contact: safeStr(row.N),         
+                        no_order: safeStr(row.C),
+                        tgl_order: safeStr(row.D),
+                        jenis_order: safeStr(row.E),
+                        no_part: safeStr(row.F),
+                        nama_part: safeStr(row.G),
+                        qty: safeNum(row.H),
+                        tipe: safeStr(row.I),
+                        keterangan: safeStr(row.J),
+                        no_rangka: safeStr(row.K),
+                        model: safeStr(row.L),
+                        tipe_mobil: safeStr(row.M),
+                        hp_contact: safeStr(row.N),
                         contact: safeStr(row.O),            // Customer Name
-                        etd: safeStr(row.R),                
-                        eta: safeStr(row.S),                
-                        status_order: safeStr(row.T) || 'On Order', 
-                        sisa: safeNum(row.U),               
-                        delivery: safeStr(row.V),           
-                        suplai: safeNum(row.W),             
-                        kedatangan_1: safeStr(row.X),       
-                        kedatangan_2: safeStr(row.Y),       
-                        kedatangan_3: safeStr(row.Z),       
-                        kedatangan_4: safeStr(row.AA),       
-                        kedatangan_5: safeStr(row.AB),       
-                        last_ata: safeStr(row.AC),           
-                        lead_time_order: safeNum(row.AD),    
-                        lead_time_delivery: safeNum(row.AE), 
-                        umur_order: safeNum(row.AF),         
+                        etd: safeStr(row.R),
+                        eta: safeStr(row.S),
+                        status_order: safeStr(row.T) || 'On Order',
+                        sisa: safeNum(row.U),
+                        delivery: safeStr(row.V),
+                        suplai: safeNum(row.W),
+                        kedatangan_1: safeStr(row.X),
+                        kedatangan_2: safeStr(row.Y),
+                        kedatangan_3: safeStr(row.Z),
+                        kedatangan_4: safeStr(row.AA),
+                        kedatangan_5: safeStr(row.AB),
+                        last_ata: safeStr(row.AC),
+                        lead_time_order: safeNum(row.AD),
+                        lead_time_delivery: safeNum(row.AE),
+                        umur_order: safeNum(row.AF),
                         // Mappings for UI:
-                        nama_pelanggan: safeStr(row.O) || safeStr(row.N) || "-", 
+                        nama_pelanggan: safeStr(row.O) || safeStr(row.N) || "-",
                         no_polisi: safeStr(row.J) || "-", // Diambil dari Kolom J (keterangan)
                         status: safeStr(row.T) || 'On Order',
                         tanggal: safeStr(row.D)
@@ -509,13 +509,13 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
                         <X className="w-5 h-5" />
                     </button>
                 </div>
-                
+
                 <div className="p-5 overflow-y-auto flex-1">
                     {!file && (
                         <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl p-8 text-center hover:bg-gray-50 dark:hover:bg-[#111] transition-colors cursor-pointer relative">
-                            <input 
-                                type="file" 
-                                accept=".xlsx, .xls, .csv" 
+                            <input
+                                type="file"
+                                accept=".xlsx, .xls, .csv"
                                 onChange={handleFileChange}
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                             />
@@ -556,7 +556,7 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
                                 </div>
                             </div>
                             <p className="text-xs text-gray-500 mb-3">Preview 5 baris pertama:</p>
-                            
+
                             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
                                 <table className="w-full text-xs text-left">
                                     <thead className="bg-gray-50 dark:bg-[#111] text-gray-600 dark:text-gray-400 font-medium">
@@ -589,9 +589,9 @@ function ImportExcelModal({ onClose, onImported }: { onClose: () => void; onImpo
                     <button onClick={onClose} className="px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-sm font-medium transition-colors">
                         Cancel
                     </button>
-                    <button 
+                    <button
                         onClick={handleImport}
-                        disabled={importing || previewData.length === 0} 
+                        disabled={importing || previewData.length === 0}
                         className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                         {importing ? <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg> : <Upload className="w-4 h-4" />}

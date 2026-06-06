@@ -33,12 +33,14 @@ const ordersRoutes = require('./routes/orders');
 const partsRoutes = require('./routes/parts');
 const dashboardRoutes = require('./routes/dashboard');
 const usersRoutes = require('./routes/users');
+const readyInstallationRoutes = require('./routes/ready-installation');
 // Use Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/parts', partsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/ready-installation', readyInstallationRoutes);
 
 // Global Error Handler
 app.use((err, req, res, next) => {

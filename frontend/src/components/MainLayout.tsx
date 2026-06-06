@@ -44,7 +44,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    document.documentElement.setAttribute("data-theme", next);
+    document.documentElement.setAttribute("data-t heme", next);
     localStorage.setItem("theme", next);
   };
 
